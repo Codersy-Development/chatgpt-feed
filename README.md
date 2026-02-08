@@ -124,14 +124,14 @@ For a better database browsing experience, use [TablePlus](https://tableplus.com
 
 1. **Download TablePlus** - Get the free version from [tableplus.com](https://tableplus.com/)
 
-2. **Locate your local D1 database** - The database file is stored in your Wrangler's D1 directory:
+2. **Locate your local D1 database** - The database file is stored inside your project's `.wrangler` directory:
 
    ```bash
-   # macOS/Linux
-   ~/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/[database-id].sqlite
+   # The file is at:
+   .wrangler/state/v3/d1/miniflare-D1DatabaseObject/[database-id].sqlite
 
    # Or find it quickly with:
-   find ~/.wrangler -name "*.sqlite" -type f
+   find .wrangler -name "*.sqlite" -type f
    ```
 
 3. **Connect in TablePlus:**
