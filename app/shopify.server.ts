@@ -23,12 +23,45 @@ class D1SessionStorage implements SessionStorage {
     }
 
     try {
+      // Extract user info from onlineAccessInfo if available
+      const userInfo = session.onlineAccessInfo
+        ? {
+            userId: session.onlineAccessInfo.associated_user?.id || null,
+            firstName:
+              session.onlineAccessInfo.associated_user?.first_name || null,
+            lastName:
+              session.onlineAccessInfo.associated_user?.last_name || null,
+            email: session.onlineAccessInfo.associated_user?.email || null,
+            accountOwner: session.onlineAccessInfo.associated_user
+              ?.account_owner
+              ? 1
+              : 0,
+            locale: session.onlineAccessInfo.associated_user?.locale || null,
+            collaborator: session.onlineAccessInfo.associated_user?.collaborator
+              ? 1
+              : 0,
+            emailVerified: session.onlineAccessInfo.associated_user
+              ?.email_verified
+              ? 1
+              : 0,
+          }
+        : {
+            userId: null,
+            firstName: null,
+            lastName: null,
+            email: null,
+            accountOwner: 0,
+            locale: null,
+            collaborator: 0,
+            emailVerified: 0,
+          };
+
       await db
         .prepare(
           `
-        INSERT OR REPLACE INTO shopify_sessions
-        (id, shop, state, isOnline, scope, accessToken, expires, onlineAccessInfo)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO sessions
+        (id, shop, state, isOnline, scope, accessToken, expires, userId, firstName, lastName, email, accountOwner, locale, collaborator, emailVerified, refreshToken, refreshTokenExpires)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
         )
         .bind(
@@ -39,8 +72,17 @@ class D1SessionStorage implements SessionStorage {
           session.scope || null,
           session.accessToken || null,
           session.expires ? session.expires.getTime() : null,
-          session.onlineAccessInfo
-            ? JSON.stringify(session.onlineAccessInfo)
+          userInfo.userId,
+          userInfo.firstName,
+          userInfo.lastName,
+          userInfo.email,
+          userInfo.accountOwner,
+          userInfo.locale,
+          userInfo.collaborator,
+          userInfo.emailVerified,
+          session.refreshToken || null,
+          session.refreshTokenExpires
+            ? session.refreshTokenExpires.getTime()
             : null,
         )
         .run();
@@ -62,7 +104,7 @@ class D1SessionStorage implements SessionStorage {
       const result = await db
         .prepare(
           `
-        SELECT * FROM shopify_sessions WHERE id = ?
+        SELECT * FROM sessions WHERE id = ?
       `,
         )
         .bind(id || null)
@@ -84,10 +126,35 @@ class D1SessionStorage implements SessionStorage {
         session.expires = new Date(result.expires as number);
       }
 
-      if (result.onlineAccessInfo) {
-        session.onlineAccessInfo = JSON.parse(
-          result.onlineAccessInfo as string,
+      // Load refresh token data for offline access tokens
+      if (result.refreshToken) {
+        session.refreshToken = result.refreshToken as string;
+      }
+
+      if (result.refreshTokenExpires) {
+        session.refreshTokenExpires = new Date(
+          result.refreshTokenExpires as number,
         );
+      }
+
+      // Reconstruct onlineAccessInfo if we have user data
+      if (result.userId) {
+        session.onlineAccessInfo = {
+          expires_in: result.expires
+            ? Math.floor(((result.expires as number) - Date.now()) / 1000)
+            : 0,
+          associated_user_scope: result.scope as string,
+          associated_user: {
+            id: result.userId as number,
+            first_name: result.firstName as string,
+            last_name: result.lastName as string,
+            email: result.email as string,
+            account_owner: Boolean(result.accountOwner),
+            locale: result.locale as string,
+            collaborator: Boolean(result.collaborator),
+            email_verified: Boolean(result.emailVerified),
+          },
+        };
       }
 
       return session;
@@ -108,7 +175,7 @@ class D1SessionStorage implements SessionStorage {
       await db
         .prepare(
           `
-        DELETE FROM shopify_sessions WHERE id = ?
+        DELETE FROM sessions WHERE id = ?
       `,
         )
         .bind(id || null)
@@ -149,7 +216,7 @@ class D1SessionStorage implements SessionStorage {
       const results = await db
         .prepare(
           `
-        SELECT * FROM shopify_sessions WHERE shop = ?
+        SELECT * FROM sessions WHERE shop = ?
       `,
         )
         .bind(shop || null)
@@ -170,10 +237,35 @@ class D1SessionStorage implements SessionStorage {
           session.expires = new Date(result.expires as number);
         }
 
-        if (result.onlineAccessInfo) {
-          session.onlineAccessInfo = JSON.parse(
-            result.onlineAccessInfo as string,
+        // Load refresh token data for offline access tokens
+        if (result.refreshToken) {
+          session.refreshToken = result.refreshToken as string;
+        }
+
+        if (result.refreshTokenExpires) {
+          session.refreshTokenExpires = new Date(
+            result.refreshTokenExpires as number,
           );
+        }
+
+        // Reconstruct onlineAccessInfo if we have user data
+        if (result.userId) {
+          session.onlineAccessInfo = {
+            expires_in: result.expires
+              ? Math.floor(((result.expires as number) - Date.now()) / 1000)
+              : 0,
+            associated_user_scope: result.scope as string,
+            associated_user: {
+              id: result.userId as number,
+              first_name: result.firstName as string,
+              last_name: result.lastName as string,
+              email: result.email as string,
+              account_owner: Boolean(result.accountOwner),
+              locale: result.locale as string,
+              collaborator: Boolean(result.collaborator),
+              email_verified: Boolean(result.emailVerified),
+            },
+          };
         }
 
         return session;
@@ -201,7 +293,7 @@ function getShopifyApp() {
       sessionStorage,
       distribution: AppDistribution.AppStore,
       future: {
-        expiringOfflineAccessTokens: true,
+        expiringOfflineAccessTokens: true, // Enable expiring offline tokens
       },
       ...(process.env.SHOP_CUSTOM_DOMAIN
         ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
@@ -252,7 +344,7 @@ export async function initializeDb(db: D1Database) {
   try {
     // Create the sessions table if it doesn't exist - all on one line
     await db.exec(
-      `CREATE TABLE IF NOT EXISTS shopify_sessions (id TEXT PRIMARY KEY, shop TEXT NOT NULL, state TEXT, isOnline INTEGER, scope TEXT, accessToken TEXT, expires INTEGER, onlineAccessInfo TEXT)`,
+      `CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, shop TEXT NOT NULL, state TEXT, isOnline INTEGER, scope TEXT, accessToken TEXT, expires INTEGER, userId INTEGER, firstName TEXT, lastName TEXT, email TEXT, accountOwner INTEGER, locale TEXT, collaborator INTEGER, emailVerified INTEGER, refreshToken TEXT, refreshTokenExpires INTEGER)`,
     );
 
     // Set the global DB instance

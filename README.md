@@ -109,7 +109,7 @@ Migrations are automatically applied when you run `npm run dev`.
 Execute SQL queries directly:
 
 ```bash
-# Local database
+# Local database - check sessions
 npx wrangler d1 execute shopify-app-db --local --command="SELECT * FROM sessions"
 
 # Production database (after deployment)
@@ -231,6 +231,29 @@ Rollback to a previous version if needed:
 ```bash
 npx wrangler rollback [deployment-id]
 ```
+
+### Automatic Deployments with GitHub
+
+Connect your GitHub repository to Cloudflare Workers for automatic deployments on every push:
+
+**1. Go to Cloudflare Workers Dashboard:**
+
+- Navigate to [Cloudflare Dashboard](https://dash.cloudflare.com)
+- Select your Worker
+- Go to **Settings** → **Deployments**
+
+**2. Connect GitHub:**
+
+- Click "Connect to GitHub"
+- Authorize Cloudflare to access your repositories
+- Select your repository and branch (e.g., `main`)
+
+**3. Configure Build Settings:**
+
+- Build command: `npm run build`
+- Build output directory: `build/client`
+
+Now every push to your selected branch automatically deploys your app! 🚀
 
 ## Project Structure
 
