@@ -1,5 +1,5 @@
 import { createRequestHandler } from "react-router";
-import { setupDb } from "../app/shopify.server";
+import { setupShopify } from "../app/shopify.server";
 
 declare module "react-router" {
   export interface AppLoadContext {
@@ -18,8 +18,8 @@ const requestHandler = createRequestHandler(
 export default {
   async fetch(request, env, ctx) {
     try {
-      // Initialize DB on first request
-      setupDb(env);
+      // Initialize Shopify app with Cloudflare env (DB, secrets, etc.)
+      setupShopify(env);
 
       return await requestHandler(request, {
         cloudflare: { env, ctx },

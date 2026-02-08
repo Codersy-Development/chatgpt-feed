@@ -1,5 +1,6 @@
 import { D1Database } from "@cloudflare/workers-types";
 import { Session } from "@shopify/shopify-api";
+import type { SessionStorage } from "@shopify/shopify-app-session-storage";
 import "@shopify/shopify-app-react-router/adapters/node";
 import {
   ApiVersion,
@@ -7,10 +8,11 @@ import {
   shopifyApp,
 } from "@shopify/shopify-app-react-router/server";
 
-// Define type for the global DB
+// Define type for the global DB and env
 declare global {
   var shopifyDb: D1Database | undefined;
   var shopifyAppInstance: ReturnType<typeof shopifyApp> | undefined;
+  var shopifyEnv: Record<string, string> | undefined;
 }
 
 // Create a D1 session storage adapter
@@ -281,22 +283,25 @@ class D1SessionStorage implements SessionStorage {
 const sessionStorage = new D1SessionStorage();
 
 // Function to get or create the Shopify app instance
+// Env is set per-request via setupShopify() called from workers/app.ts
 function getShopifyApp() {
   if (!globalThis.shopifyAppInstance) {
+    const env = globalThis.shopifyEnv || {};
+
     globalThis.shopifyAppInstance = shopifyApp({
-      apiKey: process.env.SHOPIFY_API_KEY,
-      apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
+      apiKey: env.SHOPIFY_API_KEY || "",
+      apiSecretKey: env.SHOPIFY_API_SECRET || "",
       apiVersion: ApiVersion.April26,
-      scopes: process.env.SCOPES?.split(","),
-      appUrl: process.env.SHOPIFY_APP_URL || "",
+      scopes: env.SCOPES?.split(","),
+      appUrl: env.SHOPIFY_APP_URL || "",
       authPathPrefix: "/auth",
       sessionStorage,
       distribution: AppDistribution.AppStore,
       future: {
         expiringOfflineAccessTokens: true, // Enable expiring offline tokens
       },
-      ...(process.env.SHOP_CUSTOM_DOMAIN
-        ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
+      ...(env.SHOP_CUSTOM_DOMAIN
+        ? { customShopDomains: [env.SHOP_CUSTOM_DOMAIN] }
         : {}),
     });
   }
@@ -319,6 +324,9 @@ export const authenticate = {
   },
   public: (request: Request) => {
     return getShopifyApp().authenticate.public(request);
+  },
+  webhook: (request: Request) => {
+    return getShopifyApp().authenticate.webhook(request);
   },
 };
 
@@ -358,11 +366,17 @@ export async function initializeDb(db: D1Database) {
   }
 }
 
-// Add a function that can be called from load-context.ts
-export function setupDb(env: any) {
+// Initialize Shopify with environment from Cloudflare Workers context
+export function setupShopify(env: any) {
+  // Store env globally so getShopifyApp() can access it
+  if (env && !globalThis.shopifyEnv) {
+    globalThis.shopifyEnv = env;
+  }
+
+  // Set D1 database binding immediately (table is created by migrations)
   if (env?.DB && !globalThis.shopifyDb) {
-    // Initialize the database if it exists and hasn't been initialized
-    initializeDb(env.DB).catch(console.error);
+    globalThis.shopifyDb = env.DB;
+    console.log("D1 database initialized for session storage");
   }
 }
 

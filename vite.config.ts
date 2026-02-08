@@ -1,4 +1,5 @@
 import { reactRouter } from "@react-router/dev/vite";
+import { cloudflare } from "@cloudflare/vite-plugin";
 import { defineConfig, type UserConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
@@ -48,7 +49,24 @@ export default defineConfig({
       allow: ["app", "node_modules"],
     },
   },
-  plugins: [reactRouter(), tsconfigPaths()],
+  plugins: [
+    cloudflare({
+      viteEnvironment: { name: "ssr" },
+      persistState: { path: ".wrangler/state" },
+      config: (config) => {
+        // Inject Shopify CLI environment variables into wrangler vars
+        // so they're available via context.cloudflare.env in the workerd runtime
+        config.vars ??= {};
+        config.vars.SHOPIFY_API_KEY = process.env.SHOPIFY_API_KEY ?? "";
+        config.vars.SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET ?? "";
+        config.vars.SHOPIFY_APP_URL = process.env.SHOPIFY_APP_URL ?? "";
+        config.vars.SCOPES = process.env.SCOPES ?? "";
+        config.vars.SHOP_CUSTOM_DOMAIN = process.env.SHOP_CUSTOM_DOMAIN ?? "";
+      },
+    }),
+    reactRouter(),
+    tsconfigPaths(),
+  ],
   build: {
     assetsInlineLimit: 0,
   },

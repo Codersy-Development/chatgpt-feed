@@ -4,15 +4,42 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { useFetcher } from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+export const loader = async ({ request, context }: LoaderFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
 
-  return null;
+  // Get DB from Cloudflare context (the proper way to access D1 bindings)
+  const db = context.cloudflare.env.DB;
+  let dbSession = null;
+  let sessionCount = 0;
+  if (db) {
+    const result = await db
+      .prepare(
+        "SELECT id, shop, scope, isOnline, accessToken FROM sessions WHERE shop = ? LIMIT 1",
+      )
+      .bind(session.shop)
+      .first();
+    if (result) {
+      dbSession = {
+        id: result.id as string,
+        shop: result.shop as string,
+        scope: result.scope as string,
+        isOnline: Boolean(result.isOnline),
+        hasAccessToken: Boolean(result.accessToken),
+      };
+    }
+
+    const countResult = await db
+      .prepare("SELECT COUNT(*) as count FROM sessions")
+      .first();
+    sessionCount = (countResult?.count as number) ?? 0;
+  }
+
+  return { shop: session.shop, dbSession, sessionCount };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -86,6 +113,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function Index() {
   const fetcher = useFetcher<typeof action>();
+  const loaderData = useLoaderData<typeof loader>();
 
   const shopify = useAppBridge();
   const isLoading =
@@ -126,6 +154,36 @@ export default function Index() {
           </s-link>{" "}
           mutation demo, to provide a starting point for app development.
         </s-paragraph>
+      </s-section>
+
+      <s-section heading="D1 Session Data">
+        <s-paragraph>
+          <strong>Shop: </strong>
+          <s-text>{loaderData?.shop ?? "N/A"}</s-text>
+        </s-paragraph>
+        <s-paragraph>
+          <strong>Total sessions in DB: </strong>
+          <s-text>{loaderData?.sessionCount ?? 0}</s-text>
+        </s-paragraph>
+        {loaderData?.dbSession ? (
+          <s-box
+            padding="base"
+            borderWidth="base"
+            borderRadius="base"
+            background="subdued"
+          >
+            <pre style={{ margin: 0 }}>
+              <code>{JSON.stringify(loaderData.dbSession, null, 2)}</code>
+            </pre>
+          </s-box>
+        ) : (
+          <s-paragraph>
+            <s-text tone="critical">
+              No session found in D1 database. Session storage may not be
+              persisting correctly.
+            </s-text>
+          </s-paragraph>
+        )}
       </s-section>
       <s-section heading="Get started with products">
         <s-paragraph>
