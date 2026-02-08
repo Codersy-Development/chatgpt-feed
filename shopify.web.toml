@@ -1,6 +1,7 @@
 name = "Shopify App Starter - Workers D1"
 roles = ["frontend", "backend"]
 webhooks_path = "/webhooks/app/uninstalled"
+port = 5173
 
 [commands]
 # Generate TypeScript types from wrangler.jsonc
