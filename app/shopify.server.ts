@@ -331,8 +331,8 @@ export const authenticate = {
 };
 
 export const unauthenticated = {
-  admin: (request: Request) => {
-    return getShopifyApp().unauthenticated.admin(request);
+  admin: (shop: string) => {
+    return getShopifyApp().unauthenticated.admin(shop);
   },
   public: (request: Request) => {
     return getShopifyApp().unauthenticated.public(request);
