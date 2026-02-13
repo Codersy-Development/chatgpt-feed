@@ -284,10 +284,10 @@ function mapVariantToFeedItem(
     offer_id: variant.sku || `${productId}-${variantId}`,
 
     // Weight
-    ...(variant.weight &&
-      variant.weight > 0 && {
-        weight: String(variant.weight),
-        item_weight_unit: mapWeightUnit(variant.weightUnit),
+    ...(variant.inventoryItem?.measurement?.weight &&
+      variant.inventoryItem.measurement.weight.value > 0 && {
+        weight: String(variant.inventoryItem.measurement.weight.value),
+        item_weight_unit: mapWeightUnit(variant.inventoryItem.measurement.weight.unit),
       }),
 
     // Merchant info

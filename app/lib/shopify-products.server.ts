@@ -49,8 +49,14 @@ const PRODUCTS_QUERY = `#graphql
                 availableForSale
                 inventoryQuantity
                 inventoryPolicy
-                weight
-                weightUnit
+                inventoryItem {
+                  measurement {
+                    weight {
+                      value
+                      unit
+                    }
+                  }
+                }
                 selectedOptions {
                   name
                   value
@@ -125,8 +131,14 @@ export interface ShopifyVariant {
   availableForSale: boolean;
   inventoryQuantity: number | null;
   inventoryPolicy: string;
-  weight: number | null;
-  weightUnit: string;
+  inventoryItem: {
+    measurement: {
+      weight: {
+        value: number;
+        unit: string;
+      } | null;
+    };
+  };
   selectedOptions: Array<{ name: string; value: string }>;
   image: { url: string; altText: string | null } | null;
 }
